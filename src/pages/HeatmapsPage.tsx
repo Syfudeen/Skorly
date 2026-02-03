@@ -61,9 +61,9 @@ const HeatmapsPage = () => {
   };
 
   const getHeatColor = (value: number) => {
-    if (value >= 80) return "bg-green-500"; // High performance - Green
-    if (value >= 60) return "bg-yellow-500"; // Medium performance - Gold
-    return "bg-red-500"; // Low performance - Red
+    if (value >= 80) return "bg-success"; // High performance - Green #a5d024
+    if (value >= 60) return "bg-warning"; // Medium performance - Pink #f51c77
+    return "bg-destructive"; // Low performance - Red #d62437
   };
 
   const getHeatOpacity = (value: number) => {
@@ -211,6 +211,46 @@ const HeatmapsPage = () => {
           </Card>
         </div>
 
+        {/* Overall Summary Stats */}
+        <Card className="bg-card/80 backdrop-blur-sm border-border/50">
+          <CardHeader>
+            <CardTitle>Overall Performance Summary</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-foreground">{getFilteredStudents().length}</p>
+                <p className="text-sm text-muted-foreground">Total Students</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-secondary">
+                  {Math.round(heatmapDisplayData.reduce((sum, student) => {
+                    const avgScore = platforms.reduce((pSum, platform) => pSum + (student[platform] as number), 0) / platforms.length;
+                    return sum + avgScore;
+                  }, 0) / heatmapDisplayData.length)}%
+                </p>
+                <p className="text-sm text-muted-foreground">Average Score</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-secondary">
+                  {Math.max(...heatmapDisplayData.map(student => 
+                    Math.round(platforms.reduce((sum, platform) => sum + (student[platform] as number), 0) / platforms.length)
+                  ))}%
+                </p>
+                <p className="text-sm text-muted-foreground">Top Score</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-destructive">
+                  {Math.min(...heatmapDisplayData.map(student => 
+                    Math.round(platforms.reduce((sum, platform) => sum + (student[platform] as number), 0) / platforms.length)
+                  ))}%
+                </p>
+                <p className="text-sm text-muted-foreground">Lowest Score</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Heatmap */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -240,15 +280,15 @@ const HeatmapsPage = () => {
                 <span className="text-xs text-muted-foreground">Performance:</span>
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded bg-red-500" />
+                    <div className="w-4 h-4 rounded bg-destructive" />
                     <span className="text-xs text-muted-foreground">Low (&lt;60%)</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded bg-yellow-500" />
+                    <div className="w-4 h-4 rounded bg-warning" />
                     <span className="text-xs text-muted-foreground">Medium (60-79%)</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded bg-green-500" />
+                    <div className="w-4 h-4 rounded bg-success" />
                     <span className="text-xs text-muted-foreground">High (≥80%)</span>
                   </div>
                 </div>
@@ -259,9 +299,9 @@ const HeatmapsPage = () => {
           {/* Heatmap Grid */}
           <div className="overflow-auto custom-scrollbar max-h-[600px] border border-border/30 rounded-lg">
             <table className="w-full min-w-[700px]">
-              <thead className="sticky top-0 bg-card/95 backdrop-blur-sm border-b border-border/50">
+              <thead className="sticky top-0 bg-card/95 backdrop-blur-sm border-b border-border/50 z-20">
                 <tr>
-                  <th className="p-3 text-left text-sm font-medium text-muted-foreground sticky left-0 bg-card/95 backdrop-blur-sm border-r border-border/30 min-w-[120px]">
+                  <th className="p-3 text-left text-sm font-medium text-muted-foreground sticky left-0 bg-card/95 backdrop-blur-sm border-r border-border/30 min-w-[120px] z-30">
                     Student
                   </th>
                   {platforms.map((platform) => (
@@ -280,7 +320,7 @@ const HeatmapsPage = () => {
                     transition={{ duration: 0.3, delay: Math.min(rowIndex * 0.01, 1) }} // Limit delay for large lists
                     className="border-b border-border/20 hover:bg-muted/20"
                   >
-                    <td className="p-3 text-sm font-medium text-foreground sticky left-0 bg-card/95 backdrop-blur-sm border-r border-border/20">
+                    <td className="p-3 text-sm font-medium text-foreground sticky left-0 bg-card/95 backdrop-blur-sm border-r border-border/20 z-10">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground w-8">#{rowIndex + 1}</span>
                         <span className="truncate">{row.student}</span>
@@ -333,67 +373,6 @@ const HeatmapsPage = () => {
               Scroll to view all {heatmapDisplayData.length} students
             </div>
           )}
-        </motion.div>
-
-        {/* Insights Cards */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="grid grid-cols-1 md:grid-cols-2 gap-6"
-        >
-          <Card className="bg-card/80 backdrop-blur-sm border-border/50">
-            <CardHeader>
-              <CardTitle className="text-lg">Top Performers</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {heatmapDisplayData.slice(0, 3).map((student, index) => {
-                  const avgScore = Math.round(
-                    platforms.reduce((sum, platform) => sum + (student[platform] as number), 0) / platforms.length
-                  );
-                  return (
-                    <div key={index} className="flex items-center justify-between p-3 rounded-xl bg-secondary/10 border border-secondary/20">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gradient-primary text-primary-foreground text-sm font-bold flex items-center justify-center">
-                          {index + 1}
-                        </div>
-                        <div>
-                          <p className="font-medium text-foreground">{student.student}</p>
-                          <p className="text-sm text-muted-foreground">Average Performance</p>
-                        </div>
-                      </div>
-                      <span className="text-lg font-bold text-secondary">{avgScore}%</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card/80 backdrop-blur-sm border-border/50">
-            <CardHeader>
-              <CardTitle className="text-lg">Platform Analysis</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {platforms.slice(0, 3).map((platform, index) => {
-                  const avgScore = Math.round(
-                    heatmapDisplayData.reduce((sum, student) => sum + (student[platform] as number), 0) / heatmapDisplayData.length
-                  );
-                  return (
-                    <div key={index} className="flex items-center justify-between p-3 rounded-xl bg-warning/10 border border-warning/20">
-                      <div>
-                        <p className="font-medium text-foreground">{platform}</p>
-                        <p className="text-sm text-muted-foreground">Platform Average</p>
-                      </div>
-                      <span className="text-lg font-bold text-warning">{avgScore}%</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
         </motion.div>
       </div>
     </DashboardLayout>

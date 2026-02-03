@@ -96,9 +96,6 @@ const Index = () => {
           <h1 className="text-3xl font-display font-bold text-foreground">
             Performance Dashboard
           </h1>
-          <p className="text-muted-foreground">
-            Upload your Excel file with format: Name, Reg No, Dept, Year, CodeChef ID, LeetCode ID, Codeforces ID, AtCoder ID, Codolio ID, GitHub ID
-          </p>
         </motion.div>
 
         {/* Upload Section */}

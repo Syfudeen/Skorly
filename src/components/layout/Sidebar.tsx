@@ -19,9 +19,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: GitCompare, label: "Weekly Comparison", path: "/comparison" },
-  { icon: Users, label: "Student Insights", path: "/insights" },
-  { icon: FileText, label: "Reports", path: "/reports" },
   { icon: Grid3X3, label: "Heatmaps", path: "/heatmaps" },
+  { icon: FileText, label: "Reports", path: "/reports" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 

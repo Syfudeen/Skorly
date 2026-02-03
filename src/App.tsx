@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import UploadPage from "./pages/UploadPage";
 import ComparisonPage from "./pages/ComparisonPage";
-import InsightsPage from "./pages/InsightsPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import ReportsPage from "./pages/ReportsPage";
 import HeatmapsPage from "./pages/HeatmapsPage";
@@ -25,7 +24,6 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/comparison" element={<ComparisonPage />} />
-          <Route path="/insights" element={<InsightsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/heatmaps" element={<HeatmapsPage />} />

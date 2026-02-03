@@ -109,21 +109,61 @@ const UploadSection = ({ onUploadComplete }: UploadSectionProps) => {
       </div>
 
       {/* Expected Format Info */}
-      <div className="mb-4 p-4 rounded-xl bg-accent-light border border-accent/20">
-        <h4 className="font-medium text-foreground mb-2">Required Excel Format:</h4>
-        <div className="text-sm text-muted-foreground">
-          <p className="mb-2">Your Excel file should have these columns in order:</p>
-          <div className="grid grid-cols-2 gap-2 text-xs font-mono bg-muted/50 p-3 rounded">
-            <span>1. Name</span>
-            <span>2. Reg No</span>
-            <span>3. Dept</span>
-            <span>4. Year</span>
-            <span>5. CodeChef ID</span>
-            <span>6. LeetCode ID</span>
-            <span>7. Codeforces ID</span>
-            <span>8. AtCoder ID</span>
-            <span>9. Codolio ID</span>
-            <span>10. GitHub ID</span>
+      <div className="mb-4 p-4 rounded-xl border border-primary/30" style={{backgroundColor: '#8a2be2'}}>
+        <h4 className="font-medium mb-2" style={{color: '#fff'}}>Required Excel Format:</h4>
+        <div className="text-sm">
+          <p className="mb-3" style={{color: '#fff'}}>Your Excel file should have these columns in order:</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs rounded-lg overflow-hidden" style={{backgroundColor: '#080808', border: '1px solid #333'}}>
+              <thead>
+                <tr style={{backgroundColor: '#080808'}}>
+                  <th className="px-3 py-2 text-left font-medium border-r" style={{color: '#fff', borderColor: '#333'}}>Column</th>
+                  <th className="px-3 py-2 text-left font-medium" style={{color: '#fff'}}>Field Name</th>
+                </tr>
+              </thead>
+              <tbody style={{backgroundColor: '#080808'}}>
+                <tr className="border-b" style={{borderColor: '#333'}}>
+                  <td className="px-3 py-2 font-mono border-r" style={{color: '#fff', borderColor: '#333'}}>A</td>
+                  <td className="px-3 py-2" style={{color: '#fff'}}>Name</td>
+                </tr>
+                <tr className="border-b" style={{borderColor: '#333'}}>
+                  <td className="px-3 py-2 font-mono border-r" style={{color: '#fff', borderColor: '#333'}}>B</td>
+                  <td className="px-3 py-2" style={{color: '#fff'}}>Reg No</td>
+                </tr>
+                <tr className="border-b" style={{borderColor: '#333'}}>
+                  <td className="px-3 py-2 font-mono border-r" style={{color: '#fff', borderColor: '#333'}}>C</td>
+                  <td className="px-3 py-2" style={{color: '#fff'}}>Dept</td>
+                </tr>
+                <tr className="border-b" style={{borderColor: '#333'}}>
+                  <td className="px-3 py-2 font-mono border-r" style={{color: '#fff', borderColor: '#333'}}>D</td>
+                  <td className="px-3 py-2" style={{color: '#fff'}}>Year</td>
+                </tr>
+                <tr className="border-b" style={{borderColor: '#333'}}>
+                  <td className="px-3 py-2 font-mono border-r" style={{color: '#fff', borderColor: '#333'}}>E</td>
+                  <td className="px-3 py-2" style={{color: '#fff'}}>CodeChef ID</td>
+                </tr>
+                <tr className="border-b" style={{borderColor: '#333'}}>
+                  <td className="px-3 py-2 font-mono border-r" style={{color: '#fff', borderColor: '#333'}}>F</td>
+                  <td className="px-3 py-2" style={{color: '#fff'}}>LeetCode ID</td>
+                </tr>
+                <tr className="border-b" style={{borderColor: '#333'}}>
+                  <td className="px-3 py-2 font-mono border-r" style={{color: '#fff', borderColor: '#333'}}>G</td>
+                  <td className="px-3 py-2" style={{color: '#fff'}}>Codeforces ID</td>
+                </tr>
+                <tr className="border-b" style={{borderColor: '#333'}}>
+                  <td className="px-3 py-2 font-mono border-r" style={{color: '#fff', borderColor: '#333'}}>H</td>
+                  <td className="px-3 py-2" style={{color: '#fff'}}>AtCoder ID</td>
+                </tr>
+                <tr className="border-b" style={{borderColor: '#333'}}>
+                  <td className="px-3 py-2 font-mono border-r" style={{color: '#fff', borderColor: '#333'}}>I</td>
+                  <td className="px-3 py-2" style={{color: '#fff'}}>Codolio ID</td>
+                </tr>
+                <tr>
+                  <td className="px-3 py-2 font-mono border-r" style={{color: '#fff', borderColor: '#333'}}>J</td>
+                  <td className="px-3 py-2" style={{color: '#fff'}}>GitHub ID</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -234,12 +274,13 @@ const UploadSection = ({ onUploadComplete }: UploadSectionProps) => {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="mt-6 flex items-start gap-3 p-4 rounded-xl bg-accent-light border border-accent/20"
+        className="mt-6 flex items-start gap-3 p-4 rounded-xl border border-primary/30"
+        style={{backgroundColor: '#8a2be2'}}
       >
-        <AlertCircle className="h-5 w-5 text-accent mt-0.5" />
+        <AlertCircle className="h-5 w-5 mt-0.5" style={{color: '#fff'}} />
         <div className="text-sm">
-          <p className="font-medium text-foreground">How it works</p>
-          <p className="text-muted-foreground">
+          <p className="font-medium" style={{color: '#fff'}}>How it works</p>
+          <p style={{color: '#fff'}}>
             Upload your weekly Excel data. The system will automatically compare it with the previous 
             week and generate performance insights, rankings, and trend analysis.
           </p>
