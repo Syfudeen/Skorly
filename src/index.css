@@ -134,17 +134,24 @@
     @apply border-border;
   }
 
+  /* Enable hardware acceleration for smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
-    background: 
-      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(271 76% 53% / 0.05), transparent),
-      linear-gradient(180deg, hsl(0 0% 3%), hsl(0 0% 2%));
+    background: linear-gradient(180deg, hsl(0 0% 3%), hsl(0 0% 2%));
     min-height: 100vh;
     overflow-x: hidden;
+    /* Enable GPU acceleration */
+    transform: translateZ(0);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Simplified background animations - less intensive */
+  /* Simplified background - no animations */
   body::before {
     content: '';
     position: fixed;
@@ -152,10 +159,9 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: radial-gradient(ellipse at top left, hsl(271 76% 53% / 0.1), transparent 50%);
+    background: radial-gradient(ellipse at top left, hsl(271 76% 53% / 0.08), transparent 50%);
     pointer-events: none;
     z-index: -1;
-    animation: breathe 12s ease-in-out infinite;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -164,48 +170,26 @@
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    background-size: 200% 200%;
-    animation: gradientShift 8s ease-in-out infinite;
-  }
-
-  /* Simplified animations */
-  @keyframes breathe {
-    0%, 100% { opacity: 0.1; }
-    50% { opacity: 0.2; }
-  }
-
-  @keyframes gradientShift {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-  }
-
-  @keyframes float {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-5px); }
-  }
-
-  @keyframes morphBorder {
-    0%, 100% { border-radius: 1rem; }
-    50% { border-radius: 1.5rem; }
   }
 }
 
 @layer components {
-  /* Simplified Glass Card Effect */
+  /* Optimized Glass Card Effect - reduced blur */
   .glass-card {
-    @apply backdrop-blur-xl shadow-lg;
+    @apply backdrop-blur-sm shadow-lg;
     background: linear-gradient(135deg, 
-      rgba(255,255,255,0.1), 
-      rgba(138,43,226,0.05)
+      rgba(255,255,255,0.08), 
+      rgba(138,43,226,0.04)
     );
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 1rem;
-    transition: all 0.3s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    will-change: transform;
   }
 
   .glass-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 15px 30px -8px hsl(271 76% 53% / 0.2);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px -6px hsl(271 76% 53% / 0.15);
   }
 
   /* Simplified Gradient Backgrounds */
@@ -229,18 +213,18 @@
     background: var(--gradient-destructive);
   }
 
-  /* Simplified Button Styles */
+  /* Optimized Button Styles */
   .btn-organic {
     background: var(--gradient-primary);
     border-radius: 1rem;
-    transition: all 0.3s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
     position: relative;
     overflow: hidden;
   }
 
   .btn-organic:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px -4px hsl(271 76% 53% / 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px -4px hsl(271 76% 53% / 0.25);
   }
 
   /* Simplified Glow Shadows */
@@ -314,23 +298,23 @@
     border-radius: 10px;
   }
 
-  /* Simplified Organic Card */
+  /* Optimized Organic Card */
   .card-organic {
     background: linear-gradient(135deg, 
-      rgba(255,255,255,0.08), 
-      rgba(138,43,226,0.06)
+      rgba(255,255,255,0.06), 
+      rgba(138,43,226,0.04)
     );
-    backdrop-filter: blur(15px);
-    border: 1px solid rgba(138,43,226,0.2);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(138,43,226,0.15);
     border-radius: 1rem;
-    transition: all 0.3s ease;
+    transition: transform 0.2s ease, background 0.2s ease;
   }
 
   .card-organic:hover {
-    transform: translateY(-3px);
+    transform: translateY(-2px);
     background: linear-gradient(135deg, 
-      rgba(255,255,255,0.12), 
-      rgba(138,43,226,0.1)
+      rgba(255,255,255,0.09), 
+      rgba(138,43,226,0.06)
     );
   }
 }
