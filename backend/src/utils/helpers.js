@@ -150,12 +150,39 @@ const generateJobId = () => {
 
 /**
  * Generate week information
+ * Auto-increments based on existing uploads instead of calendar week
  */
-const generateWeekInfo = (date = new Date()) => {
+const generateWeekInfo = async (date = new Date()) => {
   const momentDate = moment(date);
+  
+  // Try to get the latest week number from database
+  try {
+    const PerformanceHistory = require('../models/PerformanceHistory');
+    const latestUpload = await PerformanceHistory.findOne()
+      .sort({ uploadDate: -1 })
+      .select('weekNumber weekLabel')
+      .lean();
+    
+    if (latestUpload) {
+      // Increment from the last upload
+      const nextWeekNumber = latestUpload.weekNumber + 1;
+      return {
+        weekNumber: nextWeekNumber,
+        weekLabel: `Week ${nextWeekNumber}`,
+        uploadDate: momentDate.toDate(),
+        year: momentDate.year(),
+        month: momentDate.month() + 1,
+      };
+    }
+  } catch (error) {
+    // If database query fails, fall back to Week 1
+    console.log('Could not fetch latest week, starting from Week 1');
+  }
+  
+  // First upload - start with Week 1
   return {
-    weekNumber: momentDate.week(),
-    weekLabel: `Week ${momentDate.week()}`,
+    weekNumber: 1,
+    weekLabel: 'Week 1',
     uploadDate: momentDate.toDate(),
     year: momentDate.year(),
     month: momentDate.month() + 1,

@@ -197,6 +197,28 @@ class PlatformService {
 
         const userInfo = userInfoResponse.data.result[0];
         
+        // Fetch user rating changes to count contests
+        let contestsParticipated = 0;
+        try {
+          const ratingResponse = await axios.get(
+            `${config.BASE_URL}/user.rating`,
+            {
+              params: { handle: handle },
+              timeout: config.TIMEOUT,
+              headers: {
+                'User-Agent': 'Skorly-Platform-Tracker/1.0'
+              }
+            }
+          );
+          
+          if (ratingResponse.data.status === 'OK') {
+            contestsParticipated = ratingResponse.data.result.length;
+          }
+        } catch (error) {
+          // If rating API fails, use 0
+          contestsParticipated = 0;
+        }
+        
         // Fetch user submissions to count solved problems
         const userStatusResponse = await axios.get(
           `${config.BASE_URL}${config.USER_STATUS}`,
@@ -233,10 +255,11 @@ class PlatformService {
           rating: userInfo.rating || 0,
           maxRating: userInfo.maxRating || userInfo.rating || 0,
           problemsSolved,
-          contestsParticipated: userInfo.contribution || 0,
-          rank: userInfo.rank || null,
+          contestsParticipated, // Now using actual contest count from rating API
+          rank: null, // Codeforces rank is a string (newbie, pupil, etc.), not a number
           additionalData: {
             handle: userInfo.handle,
+            rankTitle: userInfo.rank || null, // Store rank title here
             country: userInfo.country || null,
             city: userInfo.city || null,
             organization: userInfo.organization || null,
@@ -284,13 +307,8 @@ class PlatformService {
                 reputation
                 reputationDiff
               }
-              submitStats {
+              submitStatsGlobal {
                 acSubmissionNum {
-                  difficulty
-                  count
-                  submissions
-                }
-                totalSubmissionNum {
                   difficulty
                   count
                   submissions
@@ -341,11 +359,13 @@ class PlatformService {
         const user = data.matchedUser;
         const contestRanking = data.userContestRanking;
         
-        // Calculate total problems solved
+        // Calculate total problems solved from submitStatsGlobal: Easy + Medium + Hard
         let totalSolved = 0;
-        if (user.submitStats?.acSubmissionNum) {
-          user.submitStats.acSubmissionNum.forEach(stat => {
-            totalSolved += stat.count;
+        if (user.submitStatsGlobal?.acSubmissionNum) {
+          user.submitStatsGlobal.acSubmissionNum.forEach(stat => {
+            if (stat.difficulty === 'Easy' || stat.difficulty === 'Medium' || stat.difficulty === 'Hard') {
+              totalSolved += stat.count;
+            }
           });
         }
 
@@ -554,7 +574,7 @@ class PlatformService {
       const config = PLATFORM_APIS[PLATFORMS.GITHUB];
       
       try {
-        // Fetch user info
+        // Fetch user info using REST API
         const userResponse = await axios.get(
           `${config.BASE_URL}/users/${username}`,
           {
@@ -588,12 +608,65 @@ class PlatformService {
         const repos = reposResponse.data;
         const totalStars = repos.reduce((sum, repo) => sum + repo.stargazers_count, 0);
         const totalForks = repos.reduce((sum, repo) => sum + repo.forks_count, 0);
+        
+        // Fetch total contributions from GitHub's contributions page
+        let totalContributions = 0;
+        
+        try {
+          // Fetch the contributions page
+          const contributionsResponse = await axios.get(
+            `https://github.com/users/${username}/contributions`,
+            {
+              timeout: config.TIMEOUT,
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+              }
+            }
+          );
+
+          // Parse the HTML to extract contribution count
+          const cheerio = require('cheerio');
+          const $ = cheerio.load(contributionsResponse.data);
+          
+          // Look for the H2 tag that contains "X contributions in the last year"
+          let found = false;
+          $('h2').each((i, elem) => {
+            const text = $(elem).text().trim();
+            // Match pattern like "33 contributions in the last year"
+            const match = text.match(/^(\d+)\s+contributions?\s+in\s+the\s+last\s+year/i);
+            if (match) {
+              totalContributions = parseInt(match[1]) || 0;
+              found = true;
+              logger.info(`GitHub contributions fetched for ${username}: ${totalContributions}`);
+              return false; // break
+            }
+          });
+          
+          if (!found) {
+            // Fallback: search entire body text
+            const bodyText = $('body').text();
+            const match = bodyText.match(/(\d+)\s+contributions?\s+in\s+the\s+last\s+year/i);
+            if (match) {
+              totalContributions = parseInt(match[1]) || 0;
+              logger.info(`GitHub contributions found in body for ${username}: ${totalContributions}`);
+            } else {
+              // Last fallback: estimate from repos
+              totalContributions = (user.public_repos * 5) + user.public_gists;
+              logger.warn(`GitHub contributions estimated from repos for ${username}: ${totalContributions}`);
+            }
+          }
+        } catch (contributionsError) {
+          logger.warn(`GitHub contributions fetch failed for ${username}: ${contributionsError.message}`);
+          // Fallback: estimate from repository count
+          totalContributions = (user.public_repos * 5) + user.public_gists;
+        }
 
         return {
           rating: totalStars, // Use stars as rating
           maxRating: totalStars,
           problemsSolved: user.public_repos, // Use public repos as problems solved
-          contestsParticipated: 0, // GitHub doesn't have contests
+          contestsParticipated: totalContributions, // Use actual contributions from page
           rank: null,
           additionalData: {
             username: user.login,
@@ -608,6 +681,7 @@ class PlatformService {
             following: user.following,
             totalStars,
             totalForks,
+            contributionScore: totalContributions, // Store actual contributions
             createdAt: user.created_at
           }
         };

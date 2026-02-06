@@ -4,7 +4,8 @@ import UploadSection from "@/components/upload/UploadSection";
 import { Student } from "@/types/student";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TrendingUp, TrendingDown, Minus, Trophy, Target, GitBranch, Code, Award, Github } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { TrendingUp, TrendingDown, Minus, Trophy, Target, GitBranch, Code, Award, Github, RefreshCw } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -14,7 +15,6 @@ const platforms = [
   { key: "leetcode", name: "LeetCode", icon: Target },
   { key: "codeforces", name: "Codeforces", icon: Award },
   { key: "atcoder", name: "AtCoder", icon: Code },
-  { key: "codolio", name: "Codolio", icon: GitBranch },
   { key: "github", name: "GitHub", icon: Github },
 ];
 
@@ -23,14 +23,17 @@ const Index = () => {
   const [isDataUploaded, setIsDataUploaded] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string>("all");
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
 
   // Fetch students from backend
   const fetchStudents = async (platform: string = 'all') => {
     setLoading(true);
     try {
+      // Fetch without sorting to maintain Excel sheet order
       const url = platform === 'all' 
-        ? `${API_URL}/api/students?sort=performance&order=desc&limit=500`
-        : `${API_URL}/api/students?sort=performance&order=desc&limit=500&platform=${platform}`;
+        ? `${API_URL}/api/students?limit=500`
+        : `${API_URL}/api/students?limit=500&platform=${platform}`;
       
       const response = await fetch(url);
       const result = await response.json();
@@ -58,7 +61,33 @@ const Index = () => {
     // Fetch fresh data after upload completes
     setTimeout(() => {
       fetchStudents(selectedPlatform);
+      setLastRefreshTime(new Date());
     }, 1000);
+  };
+
+  const handleRefreshData = async () => {
+    setRefreshing(true);
+    try {
+      // Call backend API to refresh all student data
+      const response = await fetch(`${API_URL}/api/refresh-data`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const result = await response.json();
+      
+      if (result.status === 'success') {
+        // Fetch updated students
+        await fetchStudents(selectedPlatform);
+        setLastRefreshTime(new Date());
+      }
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const getPerformanceBadge = (totalProblems: number) => {
@@ -82,14 +111,7 @@ const Index = () => {
   };
 
   const getSortedStudents = () => {
-    if (selectedPlatform === "all") {
-      return [...students].sort((a, b) => 
-        (b.totalStats?.totalProblems || 0) - (a.totalStats?.totalProblems || 0)
-      );
-    }
-    
-    // For platform-specific sorting, we'd need platform stats
-    // For now, just return all students
+    // Return students in Excel sheet order (no sorting)
     return students;
   };
 
@@ -149,10 +171,29 @@ const Index = () => {
           <div className="space-y-6">
             {/* Platform Selector */}
             <div className="bg-card/80 backdrop-blur-sm border border-border/50 rounded-lg p-6">
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Target className="h-5 w-5 text-primary" />
-                Select Platform
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Target className="h-5 w-5 text-primary" />
+                  Select Platform
+                </h3>
+                <div className="flex items-center gap-3">
+                  {lastRefreshTime && (
+                    <span className="text-xs text-muted-foreground">
+                      Last updated: {lastRefreshTime.toLocaleTimeString()}
+                    </span>
+                  )}
+                  <Button
+                    onClick={handleRefreshData}
+                    disabled={refreshing}
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                    {refreshing ? 'Refreshing...' : 'Refresh Data'}
+                  </Button>
+                </div>
+              </div>
               <Select value={selectedPlatform} onValueChange={setSelectedPlatform}>
                 <SelectTrigger className="w-full max-w-xs">
                   <SelectValue placeholder="Choose platform to view" />
@@ -180,7 +221,7 @@ const Index = () => {
                   {platforms.find(p => p.key === selectedPlatform)?.name} Rankings
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  Students ordered by {selectedPlatform === "all" ? "overall" : platforms.find(p => p.key === selectedPlatform)?.name} performance
+                  Students in Excel sheet order
                 </p>
               </div>
               <div className="space-y-3">
@@ -200,6 +241,9 @@ const Index = () => {
                     const rank = getStudentRank(student);
                     const changes = getStudentChanges(student);
                     
+                    // Check if student has data for selected platform
+                    const hasData = selectedPlatform === "all" || student.platformStats !== null;
+                    
                     return (
                       <div
                         key={student.regNo}
@@ -216,12 +260,14 @@ const Index = () => {
                             <h4 className="font-medium text-foreground">{student.name}</h4>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <span>{student.regNo}</span>
-                              <span>•</span>
-                              <span>{student.dept}</span>
+                              {student.dept && (
+                                <>
+                                  <span>{student.dept}</span>
+                                </>
+                              )}
                               {student.year && (
                                 <>
-                                  <span>•</span>
-                                  <span>{student.year}</span>
+                                  <span>Year {student.year}</span>
                                 </>
                               )}
                             </div>
@@ -233,31 +279,57 @@ const Index = () => {
                           {selectedPlatform === "all" && getPerformanceBadge(score)}
                           
                           {/* Stats */}
-                          <div className="text-right text-sm">
-                            <p className="text-foreground font-semibold">
-                              {score} problems
-                            </p>
-                            {rating > 0 && (
-                              <p className="text-muted-foreground flex items-center gap-1 justify-end">
-                                Rating: {rating}
-                                {changes?.rating !== undefined && changes.rating !== 0 && (
-                                  <span className={changes.rating > 0 ? "text-secondary" : "text-destructive"}>
-                                    ({changes.rating > 0 ? '+' : ''}{changes.rating})
-                                  </span>
-                                )}
-                              </p>
-                            )}
-                            {contests > 0 && (
-                              <p className="text-muted-foreground">
-                                Contests: {contests}
-                              </p>
-                            )}
-                            {rank && (
-                              <p className="text-muted-foreground">
-                                Rank: #{rank}
-                              </p>
-                            )}
-                          </div>
+                          {!hasData ? (
+                            <div className="text-right text-sm">
+                              <p className="text-muted-foreground italic">No data</p>
+                            </div>
+                          ) : (
+                            <div className="text-right text-sm">
+                              {selectedPlatform === "github" ? (
+                                // GitHub-specific display
+                                <>
+                                  <p className="text-foreground font-semibold">
+                                    {score} repositories
+                                  </p>
+                                  <p className="text-muted-foreground">
+                                    📊 {student.platformStats?.additionalData?.contributionScore || contests || 0} contributions
+                                  </p>
+                                  {student.platformStats?.additionalData?.totalStars > 0 && (
+                                    <p className="text-muted-foreground">
+                                      ⭐ {student.platformStats.additionalData.totalStars} stars
+                                    </p>
+                                  )}
+                                </>
+                              ) : (
+                                // Other platforms display
+                                <>
+                                  <p className="text-foreground font-semibold">
+                                    {score} problems
+                                  </p>
+                                  {rating > 0 && (
+                                    <p className="text-muted-foreground flex items-center gap-1 justify-end">
+                                      Rating: {rating}
+                                      {changes?.rating !== undefined && changes.rating !== 0 && (
+                                        <span className={changes.rating > 0 ? "text-secondary" : "text-destructive"}>
+                                          ({changes.rating > 0 ? '+' : ''}{changes.rating})
+                                        </span>
+                                      )}
+                                    </p>
+                                  )}
+                                  {contests > 0 && (
+                                    <p className="text-muted-foreground">
+                                      Contests: {contests}
+                                    </p>
+                                  )}
+                                  {rank && (
+                                    <p className="text-muted-foreground">
+                                      Rank: #{rank}
+                                    </p>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          )}
                           
                           {/* Platform indicator or active platforms count */}
                           <div className="text-right">
@@ -268,7 +340,7 @@ const Index = () => {
                                 </span>
                                 <span className="text-xs text-muted-foreground">platforms</span>
                               </div>
-                            ) : (
+                            ) : hasData ? (
                               <div className="flex items-center gap-2">
                                 {changes?.problemsSolved !== undefined && changes.problemsSolved !== 0 && (
                                   <div className="flex items-center gap-1">
@@ -281,47 +353,13 @@ const Index = () => {
                                   </div>
                                 )}
                               </div>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       </div>
                     );
                   })
                 )}
-              </div>
-
-              {/* Summary Stats */}
-              <div className="mt-6 pt-6 border-t border-border/50">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-foreground">{sortedStudents.length}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {selectedPlatform === "all" ? "Total Students" : "Students on Platform"}
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-secondary">
-                      {sortedStudents.length > 0 
-                        ? Math.round(sortedStudents.reduce((sum, s) => sum + getStudentScore(s), 0) / sortedStudents.length)
-                        : 0}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Avg Problems Solved</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-secondary">
-                      {sortedStudents.length > 0 ? getStudentScore(sortedStudents[0]) : 0}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Highest Problems</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-secondary">
-                      {sortedStudents.length > 0 
-                        ? Math.round(sortedStudents.reduce((sum, s) => sum + getStudentRating(s), 0) / sortedStudents.length)
-                        : 0}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Avg Rating</p>
-                  </div>
-                </div>
               </div>
             </div>
           </div>

@@ -134,7 +134,7 @@ router.post(
 
       // Generate job ID and week info
       const jobId = generateJobId();
-      const weekInfo = generateWeekInfo();
+      const weekInfo = await generateWeekInfo();
 
       // Create upload job record
       const uploadJob = new UploadJob({

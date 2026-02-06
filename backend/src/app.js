@@ -157,6 +157,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/jobs', progressRoutes);
 app.use('/api/students', studentsRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/scraper', require('./routes/scraper'));
 
 // API root endpoint
 app.get('/api', (req, res) => {

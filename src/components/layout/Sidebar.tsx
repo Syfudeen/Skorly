@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   GraduationCap,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: GitCompare, label: "Weekly Comparison", path: "/comparison" },
+  { icon: RefreshCw, label: "Auto Scraper", path: "/scraper" },
   { icon: Grid3X3, label: "Heatmaps", path: "/heatmaps" },
   { icon: FileText, label: "Reports", path: "/reports" },
   { icon: Settings, label: "Settings", path: "/settings" },

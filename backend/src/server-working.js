@@ -241,7 +241,7 @@ async function processStudent(studentData, jobId, uploadJob) {
     }
     
     // Create performance history entry
-    await PerformanceHistory.create({
+    const performanceHistory = await PerformanceHistory.create({
       regNo,
       uploadJobId: jobId,
       weekNumber: uploadJob.weekInfo?.weekNumber || 1,
@@ -265,6 +265,10 @@ async function processStudent(studentData, jobId, uploadJob) {
         errors: []
       }
     });
+    
+    // Calculate overall score
+    performanceHistory.calculateOverallScore();
+    await performanceHistory.save();
     
     logger.info(`✅ Successfully processed: ${regNo}`);
     return { success: true, regNo };
@@ -319,7 +323,7 @@ app.post('/api/upload', (req, res) => {
 
     // Create upload job
     const jobId = generateJobId();
-    const weekInfo = generateWeekInfo();
+    const weekInfo = await generateWeekInfo();
     
     const uploadJob = new UploadJob({
       jobId,
@@ -400,14 +404,21 @@ app.get('/api/jobs/:jobId', async (req, res) => {
 // Get all students with sorting
 app.get('/api/students', async (req, res) => {
   try {
-    const { sort = 'performance', order = 'desc', limit = 500, platform } = req.query;
+    const { sort, order = 'asc', limit = 500, platform } = req.query;
     
-    let sortField = 'totalStats.totalProblems';
-    if (sort === 'rating') sortField = 'totalStats.averageRating';
-    if (sort === 'contests') sortField = 'totalStats.totalContests';
+    // Default: sort by creation time (Excel sheet order)
+    let sortOptions = { createdAt: 1 }; // Ascending order (first uploaded first)
+    
+    // Only apply custom sorting if explicitly requested
+    if (sort) {
+      let sortField = 'totalStats.totalProblems';
+      if (sort === 'rating') sortField = 'totalStats.averageRating';
+      if (sort === 'contests') sortField = 'totalStats.totalContests';
+      sortOptions = { [sortField]: order === 'desc' ? -1 : 1 };
+    }
     
     const students = await Student.find()
-      .sort({ [sortField]: order === 'desc' ? -1 : 1 })
+      .sort(sortOptions)
       .limit(parseInt(limit));
     
     // If platform filter is specified, fetch platform-specific stats
@@ -429,27 +440,19 @@ app.get('/api/students', async (req, res) => {
               contestsParticipated: platformStat.currentStats?.contestsParticipated || 0,
               rank: platformStat.currentStats?.rank || null,
               changes: platformStat.changes || {},
-              fetchStatus: platformStat.fetchStatus
+              fetchStatus: platformStat.fetchStatus,
+              additionalData: platformStat.currentStats?.additionalData || {}
             } : null
           };
         })
       );
       
-      // Filter out students who don't have this platform
-      const filteredStudents = studentsWithPlatformStats.filter(s => s.platformStats !== null);
-      
-      // Sort by platform-specific stats
-      filteredStudents.sort((a, b) => {
-        const aScore = a.platformStats?.problemsSolved || 0;
-        const bScore = b.platformStats?.problemsSolved || 0;
-        return order === 'desc' ? bScore - aScore : aScore - bScore;
-      });
-      
+      // Return ALL students, even those without platform data
       return res.json({ 
         status: 'success', 
         data: { 
-          students: filteredStudents, 
-          total: filteredStudents.length,
+          students: studentsWithPlatformStats, 
+          total: studentsWithPlatformStats.length,
           platform 
         } 
       });
@@ -511,6 +514,313 @@ app.get('/api/analytics/leaderboard', async (req, res) => {
   }
 });
 
+// Get weekly comparison
+app.get('/api/analytics/weekly-comparison', async (req, res) => {
+  try {
+    const { limit = 100 } = req.query;
+
+    // Get the two most recent upload jobs
+    const recentUploads = await PerformanceHistory.aggregate([
+      {
+        $group: {
+          _id: '$uploadJobId',
+          uploadDate: { $first: '$uploadDate' },
+          weekNumber: { $first: '$weekNumber' },
+          weekLabel: { $first: '$weekLabel' }
+        }
+      },
+      { $sort: { uploadDate: -1 } },
+      { $limit: 2 }
+    ]);
+
+    if (recentUploads.length === 0) {
+      return res.status(200).json({
+        status: 'success',
+        data: {
+          hasData: false,
+          message: 'No data available. Please upload student data first.'
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const currentUploadJobId = recentUploads[0]._id;
+    const previousUploadJobId = recentUploads.length > 1 ? recentUploads[1]._id : null;
+
+    // Get current week data
+    const currentWeekData = await PerformanceHistory.find({
+      uploadJobId: currentUploadJobId
+    }).limit(parseInt(limit));
+
+    // Get previous week data if available
+    let previousWeekData = [];
+    if (previousUploadJobId) {
+      previousWeekData = await PerformanceHistory.find({
+        uploadJobId: previousUploadJobId
+      });
+    }
+
+    // Create a map of previous scores
+    const previousScoresMap = new Map();
+    previousWeekData.forEach(history => {
+      previousScoresMap.set(history.regNo, history.overallScore);
+    });
+
+    // Get student details and calculate comparison
+    const studentsWithComparison = await Promise.all(
+      currentWeekData.map(async (history) => {
+        const student = await Student.findOne({ regNo: history.regNo });
+        const previousScore = previousScoresMap.get(history.regNo);
+
+        return {
+          _id: student?._id || history.regNo,
+          regNo: history.regNo,
+          name: student?.name || 'Unknown',
+          department: student?.dept || 'Unknown',
+          year: student?.year || 'N/A',
+          platformIds: student?.platformIds || {},
+          performance: {
+            overallScore: history.overallScore,
+            previousScore: previousScore,
+            performanceLevel: history.performanceLevel,
+            platformStats: history.platformStats.map(ps => ({
+              platform: ps.platform,
+              rating: ps.rating,
+              problemsSolved: ps.problemsSolved,
+              contestsParticipated: ps.contestsParticipated,
+              rank: ps.rank,
+              fetchStatus: ps.fetchStatus
+            })),
+            weekInfo: {
+              weekNumber: history.weekNumber,
+              weekLabel: history.weekLabel,
+              uploadDate: history.uploadDate
+            }
+          }
+        };
+      })
+    );
+
+    // Calculate summary statistics
+    let improved = 0;
+    let declined = 0;
+    let unchanged = 0;
+
+    studentsWithComparison.forEach(student => {
+      const current = student.performance.overallScore;
+      const previous = student.performance.previousScore;
+
+      if (previous !== undefined) {
+        if (current > previous) improved++;
+        else if (current < previous) declined++;
+        else unchanged++;
+      } else {
+        unchanged++;
+      }
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        hasData: true,
+        currentWeek: {
+          weekNumber: recentUploads[0].weekNumber,
+          weekLabel: recentUploads[0].weekLabel,
+          uploadDate: recentUploads[0].uploadDate
+        },
+        previousWeek: previousUploadJobId ? {
+          weekNumber: recentUploads[1].weekNumber,
+          weekLabel: recentUploads[1].weekLabel,
+          uploadDate: recentUploads[1].uploadDate
+        } : null,
+        students: studentsWithComparison,
+        summary: {
+          totalStudents: studentsWithComparison.length,
+          improved,
+          declined,
+          unchanged,
+          averageCurrentScore: Math.round(
+            studentsWithComparison.reduce((sum, s) => sum + s.performance.overallScore, 0) / 
+            studentsWithComparison.length
+          ),
+          averagePreviousScore: previousWeekData.length > 0 ? Math.round(
+            previousWeekData.reduce((sum, h) => sum + h.overallScore, 0) / 
+            previousWeekData.length
+          ) : null
+        }
+      },
+      timestamp: new Date().toISOString()
+    });
+
+    logger.debug('📊 Weekly comparison data retrieved', {
+      currentWeek: recentUploads[0].weekLabel,
+      previousWeek: previousUploadJobId ? recentUploads[1].weekLabel : 'none',
+      totalStudents: studentsWithComparison.length,
+      improved,
+      declined
+    });
+  } catch (error) {
+    logger.error('Weekly comparison error:', error);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// Trigger manual scrape
+app.post('/api/scraper/trigger', async (req, res) => {
+  try {
+    logger.info('Manual scrape triggered via API');
+    const scheduledScraper = require('./services/scheduledScraper');
+    
+    // Trigger scrape in background
+    scheduledScraper.triggerManualScrape().catch(error => {
+      logger.error('Manual scrape failed:', error);
+    });
+
+    res.status(202).json({
+      status: 'success',
+      message: 'Weekly scraping started. This will take a few minutes.',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Failed to trigger scrape:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to start scraping',
+      error: error.message
+    });
+  }
+});
+
+// Get scraper status
+app.get('/api/scraper/status', async (req, res) => {
+  try {
+    const scheduledScraper = require('./services/scheduledScraper');
+    res.status(200).json({
+      status: 'success',
+      data: {
+        isRunning: scheduledScraper.isRunning,
+        message: scheduledScraper.isRunning 
+          ? 'Scraping in progress...' 
+          : 'Scraper is idle. Scheduled to run every Sunday at 11:59 PM'
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Failed to get scraper status:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to get status',
+      error: error.message
+    });
+  }
+});
+
+// Get available weeks
+app.get('/api/analytics/available-weeks', async (req, res) => {
+  try {
+    const availableWeeks = await PerformanceHistory.aggregate([
+      {
+        $group: {
+          _id: '$uploadJobId',
+          uploadDate: { $first: '$uploadDate' },
+          weekNumber: { $first: '$weekNumber' },
+          weekLabel: { $first: '$weekLabel' },
+          studentCount: { $sum: 1 }
+        }
+      },
+      { $sort: { uploadDate: -1 } }
+    ]);
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        weeks: availableWeeks.map(week => ({
+          uploadJobId: week._id,
+          weekNumber: week.weekNumber,
+          weekLabel: week.weekLabel,
+          uploadDate: week.uploadDate,
+          studentCount: week.studentCount
+        })),
+        totalWeeks: availableWeeks.length
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Failed to get available weeks:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to get weeks',
+      error: error.message
+    });
+  }
+});
+
+// Refresh data - Re-fetch platform data for all students
+app.post('/api/refresh-data', async (req, res) => {
+  try {
+    logger.info('🔄 Data refresh requested');
+    
+    // Get all students
+    const students = await Student.find().sort({ createdAt: 1 });
+    
+    if (students.length === 0) {
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'No students found. Please upload an Excel file first.' 
+      });
+    }
+
+    // Create a temporary job ID for this refresh
+    const jobId = generateJobId();
+    const weekInfo = await generateWeekInfo();
+    
+    // Process in background
+    res.status(202).json({
+      status: 'success',
+      message: 'Data refresh started. This may take a few minutes.',
+      data: {
+        jobId,
+        totalStudents: students.length
+      }
+    });
+
+    // Process students in background
+    (async () => {
+      logger.info(`🔄 Refreshing data for ${students.length} students`);
+      
+      for (const student of students) {
+        try {
+          const studentData = {
+            regNo: student.regNo,
+            name: student.name,
+            dept: student.dept,
+            year: student.year,
+            platformIds: student.platformIds
+          };
+          
+          // Create a minimal upload job object for logging
+          const mockUploadJob = {
+            addError: (type, message, data, regNo) => {
+              logger.error(`Error processing ${regNo}: ${message}`);
+            }
+          };
+          
+          await processStudent(studentData, jobId, mockUploadJob);
+          
+        } catch (error) {
+          logger.error(`Failed to refresh data for ${student.regNo}:`, error.message);
+        }
+      }
+      
+      logger.info(`✅ Data refresh completed for ${students.length} students`);
+    })();
+
+  } catch (error) {
+    logger.error('Refresh error:', error);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 // Download sample Excel
 app.get('/api/upload/sample', async (req, res) => {
   try {
@@ -532,6 +842,11 @@ async function startServer() {
     await database.connect();
     console.log('✅ MongoDB connected');
     
+    // Initialize Scheduled Scraper
+    console.log('🔄 Initializing Scheduled Scraper...');
+    const scheduledScraper = require('./services/scheduledScraper');
+    scheduledScraper.start();
+    
     app.listen(PORT, () => {
       console.log('');
       console.log('╔═══════════════════════════════════════════════════════════╗');
@@ -548,10 +863,14 @@ async function startServer() {
       console.log('   GET    /api/students            - Get all students (sorted)');
       console.log('   GET    /api/students/:regNo     - Get student details');
       console.log('   GET    /api/analytics/leaderboard - Get top performers');
+      console.log('   GET    /api/analytics/weekly-comparison - Get weekly comparison');
+      console.log('   POST   /api/scraper/trigger     - Trigger manual scrape');
+      console.log('   GET    /api/scraper/status      - Get scraper status');
       console.log('');
       console.log('⚡ Processing Mode: Synchronous (no queue)');
       console.log('📈 Fetches real data from Codeforces, LeetCode, CodeChef');
       console.log('🎯 Analyzes and sorts by performance');
+      console.log('📅 Auto-scrapes every Sunday at 11:59 PM');
       console.log('');
     });
     

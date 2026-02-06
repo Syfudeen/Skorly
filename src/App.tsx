@@ -10,6 +10,7 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import ReportsPage from "./pages/ReportsPage";
 import HeatmapsPage from "./pages/HeatmapsPage";
 import SettingsPage from "./pages/SettingsPage";
+import ScraperPage from "./pages/ScraperPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/heatmaps" element={<HeatmapsPage />} />
+          <Route path="/scraper" element={<ScraperPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

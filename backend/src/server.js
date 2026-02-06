@@ -35,6 +35,11 @@ async function initializeServices() {
     logger.info('🔄 Initializing Queue System...');
     await queueManager.initialize();
 
+    // Initialize Scheduled Scraper
+    logger.info('🔄 Initializing Scheduled Scraper...');
+    const scheduledScraper = require('./services/scheduledScraper');
+    scheduledScraper.start();
+
     logger.info('✅ All services initialized successfully');
 
   } catch (error) {

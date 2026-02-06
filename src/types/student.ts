@@ -27,7 +27,9 @@ export interface PlatformScore {
   previousScore?: number;
   change?: number;
   rating?: number;
+  previousRating?: number;
   problemsSolved?: number;
+  previousProblemsSolved?: number;
   contests?: number;
   rank?: number;
 }

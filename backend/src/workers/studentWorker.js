@@ -334,7 +334,7 @@ class StudentWorker {
    */
   async savePerformanceHistory(student, platformResults, comparison, uploadJobId) {
     try {
-      const weekInfo = generateWeekInfo();
+      const weekInfo = await generateWeekInfo();
       
       // Create performance history entry
       const performanceHistory = new PerformanceHistory({

@@ -426,6 +426,265 @@ router.get(
 );
 
 /**
+ * @route   GET /api/analytics/available-weeks
+ * @desc    Get all available weeks for comparison
+ * @access  Public
+ */
+router.get(
+  '/available-weeks',
+  readLimiter,
+  catchAsync(async (req, res) => {
+    // Get all unique upload jobs with their week information
+    const availableWeeks = await PerformanceHistory.aggregate([
+      {
+        $group: {
+          _id: '$uploadJobId',
+          uploadDate: { $first: '$uploadDate' },
+          weekNumber: { $first: '$weekNumber' },
+          weekLabel: { $first: '$weekLabel' },
+          studentCount: { $sum: 1 }
+        }
+      },
+      { $sort: { uploadDate: -1 } }
+    ]);
+
+    res.status(HTTP_STATUS.OK).json({
+      status: 'success',
+      data: {
+        weeks: availableWeeks.map(week => ({
+          uploadJobId: week._id,
+          weekNumber: week.weekNumber,
+          weekLabel: week.weekLabel,
+          uploadDate: week.uploadDate,
+          studentCount: week.studentCount
+        })),
+        totalWeeks: availableWeeks.length
+      },
+      timestamp: new Date().toISOString()
+    });
+  })
+);
+
+/**
+ * @route   GET /api/analytics/weekly-comparison
+ * @desc    Get weekly comparison data for all students
+ * @access  Public
+ */
+router.get(
+  '/weekly-comparison',
+  readLimiter,
+  catchAsync(async (req, res) => {
+    const { limit = 100, weekId } = req.query;
+
+    // Get the two most recent upload jobs or specific week if weekId provided
+    let recentUploads;
+    
+    if (weekId) {
+      // Get specific week and its previous week
+      const allUploads = await PerformanceHistory.aggregate([
+        {
+          $group: {
+            _id: '$uploadJobId',
+            uploadDate: { $first: '$uploadDate' },
+            weekNumber: { $first: '$weekNumber' },
+            weekLabel: { $first: '$weekLabel' }
+          }
+        },
+        { $sort: { uploadDate: -1 } }
+      ]);
+
+      logger.info(`All available weeks: ${allUploads.map(u => `${u.weekLabel} (${u._id})`).join(', ')}`);
+      logger.info(`Looking for weekId: ${weekId}`);
+
+      const selectedIndex = allUploads.findIndex(upload => upload._id.toString() === weekId);
+      
+      if (selectedIndex === -1) {
+        throw new AppError('Selected week not found', HTTP_STATUS.NOT_FOUND);
+      }
+
+      logger.info(`Selected week index: ${selectedIndex}, Week: ${allUploads[selectedIndex].weekLabel}`);
+
+      recentUploads = [allUploads[selectedIndex]];
+      if (selectedIndex + 1 < allUploads.length) {
+        recentUploads.push(allUploads[selectedIndex + 1]);
+        logger.info(`Previous week: ${allUploads[selectedIndex + 1].weekLabel}`);
+      } else {
+        logger.info('No previous week available');
+      }
+    } else {
+      // Get the two most recent upload jobs (default behavior)
+      recentUploads = await PerformanceHistory.aggregate([
+        {
+          $group: {
+            _id: '$uploadJobId',
+            uploadDate: { $first: '$uploadDate' },
+            weekNumber: { $first: '$weekNumber' },
+            weekLabel: { $first: '$weekLabel' }
+          }
+        },
+        { $sort: { uploadDate: -1 } },
+        { $limit: 2 }
+      ]);
+    }
+
+    if (recentUploads.length === 0) {
+      return res.status(HTTP_STATUS.OK).json({
+        status: 'success',
+        data: {
+          hasData: false,
+          message: 'No data available. Please upload student data first.'
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const currentUploadJobId = recentUploads[0]._id;
+    const previousUploadJobId = recentUploads.length > 1 ? recentUploads[1]._id : null;
+
+    // Get current week data
+    const currentWeekData = await PerformanceHistory.find({
+      uploadJobId: currentUploadJobId
+    }).limit(parseInt(limit));
+
+    // Get previous week data if available
+    let previousWeekData = [];
+    if (previousUploadJobId) {
+      previousWeekData = await PerformanceHistory.find({
+        uploadJobId: previousUploadJobId
+      });
+    }
+
+    // Create a map of previous scores and platform data
+    const previousScoresMap = new Map();
+    const previousPlatformStatsMap = new Map();
+    previousWeekData.forEach(history => {
+      previousScoresMap.set(history.regNo, history.overallScore);
+      // Store previous platform stats for comparison
+      const platformStatsMap = new Map();
+      history.platformStats.forEach(ps => {
+        platformStatsMap.set(ps.platform, {
+          rating: ps.rating,
+          problemsSolved: ps.problemsSolved,
+          contestsParticipated: ps.contestsParticipated,
+          rank: ps.rank
+        });
+      });
+      previousPlatformStatsMap.set(history.regNo, platformStatsMap);
+    });
+
+    // Debug logging
+    logger.info(`Weekly Comparison: Current week has ${currentWeekData.length} students, Previous week has ${previousWeekData.length} students`);
+    if (currentWeekData.length > 0) {
+      const sampleRegNo = currentWeekData[0].regNo;
+      const samplePrevStats = previousPlatformStatsMap.get(sampleRegNo);
+      logger.info(`Sample student ${sampleRegNo} previous stats:`, samplePrevStats);
+    }
+
+    // Get student details and calculate comparison
+    const studentsWithComparison = await Promise.all(
+      currentWeekData.map(async (history) => {
+        const student = await Student.findByRegNo(history.regNo);
+        const previousScore = previousScoresMap.get(history.regNo);
+        const previousPlatformStats = previousPlatformStatsMap.get(history.regNo);
+
+        return {
+          _id: student?._id || history.regNo,
+          regNo: history.regNo,
+          name: student?.name || 'Unknown',
+          department: student?.department || 'Unknown',
+          year: student?.year || 'N/A',
+          platformIds: student?.platformIds || {},
+          performance: {
+            overallScore: history.overallScore,
+            previousScore: previousScore,
+            performanceLevel: history.performanceLevel,
+            platformStats: history.platformStats.map(ps => {
+              const prevStats = previousPlatformStats?.get(ps.platform);
+              return {
+                platform: ps.platform,
+                rating: ps.rating,
+                problemsSolved: ps.problemsSolved,
+                contestsParticipated: ps.contestsParticipated,
+                rank: ps.rank,
+                fetchStatus: ps.fetchStatus,
+                previousRating: prevStats?.rating,
+                previousProblemsSolved: prevStats?.problemsSolved
+              };
+            }),
+            weekInfo: {
+              weekNumber: history.weekNumber,
+              weekLabel: history.weekLabel,
+              uploadDate: history.uploadDate
+            }
+          }
+        };
+      })
+    );
+
+    // Calculate summary statistics
+    let improved = 0;
+    let declined = 0;
+    let unchanged = 0;
+
+    studentsWithComparison.forEach(student => {
+      const current = student.performance.overallScore;
+      const previous = student.performance.previousScore;
+
+      if (previous !== undefined) {
+        if (current > previous) improved++;
+        else if (current < previous) declined++;
+        else unchanged++;
+      } else {
+        unchanged++;
+      }
+    });
+
+    res.status(HTTP_STATUS.OK).json({
+      status: 'success',
+      data: {
+        hasData: true,
+        currentWeek: {
+          uploadJobId: recentUploads[0]._id,
+          weekNumber: recentUploads[0].weekNumber,
+          weekLabel: recentUploads[0].weekLabel,
+          uploadDate: recentUploads[0].uploadDate
+        },
+        previousWeek: previousUploadJobId ? {
+          uploadJobId: recentUploads[1]._id,
+          weekNumber: recentUploads[1].weekNumber,
+          weekLabel: recentUploads[1].weekLabel,
+          uploadDate: recentUploads[1].uploadDate
+        } : null,
+        students: studentsWithComparison,
+        summary: {
+          totalStudents: studentsWithComparison.length,
+          improved,
+          declined,
+          unchanged,
+          averageCurrentScore: Math.round(
+            studentsWithComparison.reduce((sum, s) => sum + s.performance.overallScore, 0) / 
+            studentsWithComparison.length
+          ),
+          averagePreviousScore: previousWeekData.length > 0 ? Math.round(
+            previousWeekData.reduce((sum, h) => sum + h.overallScore, 0) / 
+            previousWeekData.length
+          ) : null
+        }
+      },
+      timestamp: new Date().toISOString()
+    });
+
+    logger.debug('📊 Weekly comparison data retrieved', {
+      currentWeek: recentUploads[0].weekLabel,
+      previousWeek: previousUploadJobId ? recentUploads[1].weekLabel : 'none',
+      totalStudents: studentsWithComparison.length,
+      improved,
+      declined
+    });
+  })
+);
+
+/**
  * @route   GET /api/analytics/comparison/:uploadJobId
  * @desc    Get comparison analytics for a specific upload
  * @access  Public
